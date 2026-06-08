@@ -1,0 +1,55 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from './auth/LandingPage';
+import DeviceApprovalPage from './auth/DeviceApprovalPage';
+import Layout from './main/Layout';
+import Dashboard from './main/Dashboard';
+import Materials from './main/Materials';
+import Logs from './main/Logs';
+import StorageControl from './main/StorageControl';
+import AddUser from './main/AddUsers';
+import Settings from './main/Settings';
+import RequestForm from './main/RequestForm';
+import RequestsList from './main/RequestsList';
+import Notifications from './main/Notifications';
+import UserAnalytics from './main/UserAnalytics';
+import GuestPage from './guest/GuestPage';
+import { ToastContainer } from './components/Toast';
+import './App.css';
+
+function App() {
+  return (
+    <BrowserRouter>
+      <ToastContainer />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/guest" element={<GuestPage />} />
+        
+        {/* Device Approval Routes */}
+        <Route path="/approve-device" element={<DeviceApprovalPage />} />
+        <Route path="/deny-device" element={<DeviceApprovalPage />} />
+
+        <Route element={<Layout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/materials" element={<Materials />} />
+          <Route path="/materials/requests-list" element={<RequestsList showPendingOnly />} />
+          <Route path="/materials/logs" element={<Navigate to="/storage-control/logs" replace />} />
+          <Route path="/storage-control" element={<StorageControl />} />
+          <Route path="/storage-control/requests-history" element={<RequestsList showHistoryOnly />} />
+          <Route path="/storage-control/logs" element={<Logs />} />
+          <Route path="/add-user" element={<AddUser />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/request" element={<RequestForm />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/user-analytics" element={<UserAnalytics />} />
+          <Route path="/orders" element={<Navigate to="/storage-control/requests-history" replace />} />
+        </Route>
+
+        {/* Fallback to home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
+
