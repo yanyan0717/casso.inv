@@ -105,7 +105,12 @@ export default function Notifications() {
       }
       const requestData = requestSnap.data();
       const approvedQty: number = requestData.approved_quantity;
-      const materialRef: string = requestData.material_ref || requestData.material_id;
+      const materialRef = requestData.material_ref || requestData.material_id;
+
+      if (!materialRef) {
+        showToast('Material reference missing for this request.', 'error');
+        return;
+      }
 
       // Fetch material to check current stock
       const materialSnap = await getDoc(doc(db, 'materials', materialRef));
