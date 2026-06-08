@@ -77,7 +77,7 @@ export default function RequestForm() {
     try {
       await addDoc(collection(db, 'requests'), {
         user_id: user.uid,
-        material_id: selectedMaterial.id,
+        material_ref: selectedMaterial.id,
         quantity: qtyNumber,
         purpose,
         status: 'pending',
@@ -85,7 +85,7 @@ export default function RequestForm() {
       });
 
       await addDoc(collection(db, 'material_logs'), {
-        material_id: selectedMaterial.id,
+        material_ref: selectedMaterial.id,
         material_name: selectedMaterial.name,
         action_type: 'REQUEST_SUBMITTED',
         quantity: qtyNumber,

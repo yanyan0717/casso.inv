@@ -105,10 +105,10 @@ export default function Notifications() {
       }
       const requestData = requestSnap.data();
       const approvedQty: number = requestData.approved_quantity;
-      const materialId: string = requestData.material_id;
+      const materialRef: string = requestData.material_ref || requestData.material_id;
 
       // Fetch material to check current stock
-      const materialSnap = await getDoc(doc(db, 'materials', materialId));
+      const materialSnap = await getDoc(doc(db, 'materials', materialRef));
       if (!materialSnap.exists()) {
         showToast('Material not found.', 'error');
         return;
@@ -122,11 +122,11 @@ export default function Notifications() {
       }
 
       // Deduct stock
-      await updateDoc(doc(db, 'materials', materialId), { stocks: currentStock - approvedQty });
+      await updateDoc(doc(db, 'materials', materialRef), { stocks: currentStock - approvedQty });
 
       // Log the action
       await addDoc(collection(db, 'material_logs'), {
-        material_id: materialId,
+        material_ref: materialRef,
         material_name: materialData.name,
         action_type: 'APPROVED_REQUEST',
         quantity: approvedQty,

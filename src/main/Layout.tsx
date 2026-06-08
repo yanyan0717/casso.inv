@@ -97,7 +97,7 @@ export default function Layout() {
 
         const qty = requestData.quantity || 0;
         const requestUserId = requestData.user_id || '';
-        const requestMaterialId = requestData.material_id || '';
+        const requestMaterialId = requestData.material_ref || requestData.material_id || '';
 
         let userName = 'A user';
         let materialName = 'an item';
@@ -136,7 +136,7 @@ export default function Layout() {
 
         try {
           await addDoc(collection(db, 'material_logs'), {
-            material_id: requestMaterialId,
+            material_ref: requestMaterialId,
             material_name: materialName,
             action_type: 'REQUEST_NOTIFICATION',
             quantity: qty,

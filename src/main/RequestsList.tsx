@@ -11,7 +11,8 @@ interface RequestEntry {
   id: string;
   created_at: string;
   user_id: string;
-  material_id: string;
+  material_ref?: string;
+  material_id?: string;
   quantity: number;
   purpose: string;
   status: 'pending' | 'approved' | 'rejected' | 'pending_user_approval';
@@ -21,7 +22,6 @@ interface RequestEntry {
   } | null;
   materials: {
     name: string;
-    material_id: string | null;
     stocks: number;
   } | null;
 }
@@ -88,13 +88,14 @@ export default function RequestsList({ showHistoryOnly = false, showPendingOnly 
       // 2. Map request entries
       const data = requestsSnap.docs.map(docSnap => {
         const req = docSnap.data();
+        const materialRef = req.material_ref || req.material_id;
         return {
           id: docSnap.id,
           ...req,
           profiles: { full_name: profileMap[req.user_id]?.full_name || 'Unknown User' },
           materials: {
-            name: materialMap[req.material_id]?.name || 'Unknown Item',
-            stocks: materialMap[req.material_id]?.stocks || 0
+            name: materialMap[materialRef]?.name || 'Unknown Item',
+            stocks: materialMap[materialRef]?.stocks || 0
           }
         };
       });
@@ -167,11 +168,12 @@ export default function RequestsList({ showHistoryOnly = false, showPendingOnly 
     try {
       if (qtyNumber === request.quantity) {
         // Full Approval
-        const newStock = request.materials!.stocks - request.quantity;
-        await updateDoc(doc(db, 'materials', request.material_id), { stocks: newStock });
+        const refId = request.material_ref || request.material_id;
+      const newStock = request.materials!.stocks - request.quantity;
+        await updateDoc(doc(db, 'materials', refId), { stocks: newStock });
 
         await addDoc(collection(db, 'material_logs'), {
-          material_id: request.material_id,
+          material_ref: refId,
           material_name: request.materials!.name,
           action_type: 'APPROVED_REQUEST',
           quantity: request.quantity,
@@ -308,7 +310,7 @@ export default function RequestsList({ showHistoryOnly = false, showPendingOnly 
 
     autoTable(docPdf, {
       startY: 40,
-      head: [['Date', 'Requested By', 'Item (ID)', 'Quantity', 'Purpose', 'Status']],
+      head: [['Date', 'Requested By', 'Item', 'Quantity', 'Purpose', 'Status']],
       body: tableData,
       headStyles: {
         fillColor: [22, 101, 52], // Project green

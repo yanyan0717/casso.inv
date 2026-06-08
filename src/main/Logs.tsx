@@ -298,7 +298,7 @@ export default function Logs() {
                 {filteredLogs.map((log, index) => (
                   <tr
                     key={log.id}
-                    onClick={() => log.material_id && navigate('/materials', { state: { highlightItemId: log.material_id } })}
+                    onClick={() => (log.material_ref || log.material_id) && navigate('/materials', { state: { highlightItemId: log.material_ref || log.material_id } })}
                     className={`hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
                   >
                     <td className="px-6 py-3 text-gray-500 text-xs">

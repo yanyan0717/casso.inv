@@ -27,7 +27,8 @@ interface Material {
 
 interface MaterialLog {
   id: string;
-  material_id: string;
+  material_ref?: string;
+  material_id?: string;
   material_name: string;
   action_type: string;
   quantity: number;
@@ -59,6 +60,13 @@ const SIZE_OPTIONS = [
   'XXL',
   'One Size',
   'Custom'
+];
+
+const CATEGORY_OPTIONS = [
+  { value: 'furniture', label: 'Furniture' },
+  { value: 'electronics', label: 'Electronics' },
+  { value: 'supplies', label: 'Supplies' },
+  { value: 'other', label: 'Other' },
 ];
 
 export default function Materials() {
@@ -133,6 +141,7 @@ export default function Materials() {
     color: '',
     size: '',
     variant: '',
+    custom_category: '',
     low_stock_threshold: '5',
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -206,7 +215,7 @@ export default function Materials() {
       
       if (user && materialToDelete) {
         await addDoc(collection(db, 'material_logs'), {
-          material_id: materialToDelete.id,
+          material_ref: materialToDelete.id,
           material_name: materialToDelete.name,
           action_type: 'DELETE',
           quantity: materialToDelete.stocks,
@@ -248,7 +257,7 @@ export default function Materials() {
       await updateDoc(doc(db, 'materials', selectedDeductItem.id), { stocks: newStock });
       
       await addDoc(collection(db, 'material_logs'), {
-        material_id: selectedDeductItem.id,
+        material_ref: selectedDeductItem.id,
         material_name: selectedDeductItem.name,
         action_type: 'deduction',
         quantity: qty,
@@ -489,16 +498,19 @@ export default function Materials() {
   const openModal = (mode: 'add' | 'edit' | 'view', material?: Material) => {
     setModalMode(mode);
     if (material) {
-      // If unit is not in known list, treat it as custom
+      // If unit/category are not in known lists, treat them as custom
       const knownUnits = ['pcs','box','bottle','gallon','rolls','pack'];
-      const isCustom = material.unit && !knownUnits.includes(material.unit);
+      const knownCategories = ['furniture','electronics','supplies','other'];
+      const isCustomUnit = material.unit && !knownUnits.includes(material.unit);
+      const isCustomCategory = material.category && !knownCategories.includes(material.category);
       setFormData({
         id: material.id,
         // material_id intentionally omitted
         name: material.name,
-        category: material.category,
-        unit: isCustom ? 'custom' : (material.unit || ''),
-        custom_unit: isCustom ? material.unit : '',
+        category: isCustomCategory ? 'custom' : (material.category || ''),
+        custom_category: isCustomCategory ? material.category : '',
+        unit: isCustomUnit ? 'custom' : (material.unit || ''),
+        custom_unit: isCustomUnit ? material.unit : '',
         stocks: material.stocks.toString(),
         description: material.description || '',
         picture: material.picture || '',
@@ -560,8 +572,19 @@ export default function Materials() {
       return;
     }
 
-    if (!formData.name || !formData.category) {
+    let finalCategory = formData.category;
+    if (formData.category === 'custom') {
+      finalCategory = formData.custom_category.trim() || '';
+      if (!finalCategory) {
+        showToast('Please enter a custom category', 'error');
+        setSaving(false);
+        return;
+      }
+    }
+
+    if (!formData.name || !finalCategory) {
       showToast('Please fill in required fields', 'error');
+      setSaving(false);
       return;
     }
 
@@ -587,7 +610,7 @@ export default function Materials() {
 
     const materialData: any = {
       name: formData.name,
-      category: formData.category,
+      category: finalCategory,
       unit: finalUnit,
       stocks: newStock,
       description: formData.description,
@@ -611,7 +634,7 @@ export default function Materials() {
         const docRef = await addDoc(collection(db, 'materials'), materialData);
         if (user) {
           await addDoc(collection(db, 'material_logs'), {
-            material_id: docRef.id,
+            material_ref: docRef.id,
             material_name: materialData.name,
             action_type: 'ADD',
             quantity: materialData.stocks,
@@ -1272,7 +1295,18 @@ export default function Materials() {
                         <option value="electronics">Electronics</option>
                         <option value="supplies">Supplies</option>
                         <option value="other">Other</option>
+                        <option value="custom">Custom...</option>
                       </select>
+                      {formData.category === 'custom' && (
+                        <input
+                          type="text"
+                          value={formData.custom_category}
+                          onChange={(e) => setFormData({ ...formData, custom_category: e.target.value })}
+                          placeholder="Enter custom category (e.g. Office Supplies)"
+                          disabled={modalMode === 'view'}
+                          className="w-full mt-2 px-3 py-2 rounded-md border border-gray-200 bg-white text-black text-sm focus:ring-2 focus:ring-[#166534]/10 focus:border-[#166534] transition-all outline-none disabled:opacity-70 disabled:bg-gray-100"
+                        />
+                      )}
                     </div>
 
                     <div className="space-y-1">
@@ -1293,13 +1327,14 @@ export default function Materials() {
                         <option value="pack">pack</option>
                         <option value="custom">Custom...</option>
                       </select>
-                      {formData.unit === 'custom' && modalMode !== 'view' && (
+                      {formData.unit === 'custom' && (
                         <input
                           type="text"
                           value={formData.custom_unit}
                           onChange={(e) => setFormData({ ...formData, custom_unit: e.target.value })}
                           placeholder="Enter custom unit (e.g. sachet)"
-                          className="w-full mt-2 px-3 py-2 rounded-md border border-gray-200 bg-white text-black text-sm focus:ring-2 focus:ring-[#166534]/10 focus:border-[#166534] transition-all outline-none"
+                          disabled={modalMode === 'view'}
+                          className="w-full mt-2 px-3 py-2 rounded-md border border-gray-200 bg-white text-black text-sm focus:ring-2 focus:ring-[#166534]/10 focus:border-[#166534] transition-all outline-none disabled:opacity-70 disabled:bg-gray-100"
                         />
                       )}
                     </div>
