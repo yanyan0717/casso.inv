@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Loader, CheckCircle, XCircle } from 'lucide-react';
 
@@ -32,7 +32,7 @@ export default function DeviceApprovalPage() {
           setMessage(`Device ${actionText} successfully! You can now close this window.`);
         } else {
           setStatus('error');
-          const text = await response.text();
+          await response.text();
           setMessage('Failed to process your request. Please try again or contact support.');
         }
       } catch (error) {

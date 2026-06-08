@@ -169,7 +169,12 @@ export default function RequestsList({ showHistoryOnly = false, showPendingOnly 
       if (qtyNumber === request.quantity) {
         // Full Approval
         const refId = request.material_ref || request.material_id;
-      const newStock = request.materials!.stocks - request.quantity;
+        if (!refId) {
+          showToast('Unable to approve request: missing item reference.', 'error');
+          setProcessingId(null);
+          return;
+        }
+        const newStock = request.materials!.stocks - request.quantity;
         await updateDoc(doc(db, 'materials', refId), { stocks: newStock });
 
         await addDoc(collection(db, 'material_logs'), {

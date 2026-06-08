@@ -62,13 +62,6 @@ const SIZE_OPTIONS = [
   'Custom'
 ];
 
-const CATEGORY_OPTIONS = [
-  { value: 'furniture', label: 'Furniture' },
-  { value: 'electronics', label: 'Electronics' },
-  { value: 'supplies', label: 'Supplies' },
-  { value: 'other', label: 'Other' },
-];
-
 export default function Materials() {
   const location = useLocation();
   const [highlightItemId, setHighlightItemId] = useState<string | null>(null);
@@ -526,6 +519,8 @@ export default function Materials() {
         name: '',
         category: '',
         unit: '',
+        custom_unit: '',
+        custom_category: '',
         stocks: '',
         description: '',
         picture: '',

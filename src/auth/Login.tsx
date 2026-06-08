@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { getApps, getApp } from 'firebase/app';
+import { getApp } from 'firebase/app';
 import { getFunctions } from 'firebase/functions';
 import { auth, db } from '../lib/firebase';
 import { Eye, EyeOff } from 'lucide-react';

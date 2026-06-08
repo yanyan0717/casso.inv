@@ -145,6 +145,11 @@ export default function OrdersList({ showHistoryOnly = false, showPendingOnly = 
 
     try {
       const refId = request.material_ref || request.material_id;
+      if (!refId) {
+        showToast('Unable to approve request: missing item reference.', 'error');
+        setProcessingId(null);
+        return;
+      }
       // 1. Deduct stock
       const newStock = request.materials.stocks - request.quantity;
       await updateDoc(doc(db, 'materials', refId), { stocks: newStock });
