@@ -2,13 +2,10 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { getApp } from 'firebase/app';
-import { getFunctions } from 'firebase/functions';
+// device approval removed
 import { auth, db } from '../lib/firebase';
 import { Eye, EyeOff } from 'lucide-react';
-import DeviceApprovalModal from '../components/DeviceApprovalModal';
-import { getOrCreateDeviceId, getDeviceName, clearDeviceId } from '../lib/deviceService';
-import { isDeviceApproved, requestDeviceApproval } from '../lib/deviceApprovalService';
+// Device approval dependencies removed
 
 export default function Login() {
   const navigate = useNavigate();
@@ -17,7 +14,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [pendingDevice, setPendingDevice] = useState<{ email: string; deviceName: string } | null>(null);
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,33 +61,8 @@ export default function Login() {
       }
 
       // Sign in with email and password
-      const userCredential = await signInWithEmailAndPassword(auth, userEmail, password);
-      const userId = userCredential.user.uid;
+      await signInWithEmailAndPassword(auth, userEmail, password);
 
-      // Check device approval
-      const deviceId = getOrCreateDeviceId();
-      const deviceName = getDeviceName();
-      const approved = await isDeviceApproved(userId, deviceId);
-
-      if (!approved) {
-        // Device not approved - request approval and show modal
-        try {
-          const functions = getFunctions(getApp());
-          await requestDeviceApproval(functions, userId, userEmail, deviceId, deviceName);
-          setPendingDevice({ email: userEmail, deviceName });
-          // Sign out the user since device is not approved
-          await auth.signOut();
-          return;
-        } catch (approvalError: any) {
-          setError(approvalError.message || 'Failed to send approval email');
-          await auth.signOut();
-          clearDeviceId();
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Device is approved - proceed with normal login
       // Store user info in localStorage
       localStorage.setItem('user', JSON.stringify({
         username: profileData.username || username.trim(),
@@ -217,14 +189,7 @@ export default function Login() {
       </form>
     </div>
 
-    {/* Device Approval Modal */}
-    {pendingDevice && (
-      <DeviceApprovalModal
-        email={pendingDevice.email}
-        deviceName={pendingDevice.deviceName}
-        onClose={() => setPendingDevice(null)}
-      />
-    )}
+    {/* Device approval removed */}
     </>
   );
 }

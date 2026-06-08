@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from './auth/LandingPage';
-import DeviceApprovalPage from './auth/DeviceApprovalPage';
 import Layout from './main/Layout';
 import Dashboard from './main/Dashboard';
 import Materials from './main/Materials';
@@ -24,9 +23,7 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/guest" element={<GuestPage />} />
         
-        {/* Device Approval Routes */}
-        <Route path="/approve-device" element={<DeviceApprovalPage />} />
-        <Route path="/deny-device" element={<DeviceApprovalPage />} />
+        {/* Device approval removed */}
 
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<Dashboard />} />
