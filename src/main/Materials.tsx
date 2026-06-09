@@ -99,6 +99,14 @@ export default function Materials() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  const getCurrentMonthKey = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const getCurrentMonthLabel = () => {
+    const now = new Date();
+    return now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
   const [reportData, setReportData] = useState<{
     additions: MaterialLog[];
     deductions: MaterialLog[];
@@ -304,9 +312,12 @@ export default function Materials() {
   const generateMonthlyReport = async () => {
     setGeneratingReport(true);
     try {
-      const [year, month] = reportMonth.split('-');
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month) - 1 + 1, 0, 23, 59, 59, 999);
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      setReportMonth(getCurrentMonthKey());
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
       // Firestore values for `created_at` may be stored as strings or as Timestamps.
       // Querying against mixed types can be unreliable, so we fetch recent logs
@@ -402,8 +413,8 @@ export default function Materials() {
           }));
 
           await addDoc(collection(db, 'material_logs_archive'), {
-            month: parseInt(month),
-            year: parseInt(year),
+            month,
+            year,
             archived_at: new Date().toISOString(),
             record_count: minimal.length,
             logs: minimal,
@@ -480,14 +491,14 @@ export default function Materials() {
   // Export Monthly Report to PDF
   const exportMonthlyReportPDF = async () => {
     const docPdf = new jsPDF();
-    const [year, month] = reportMonth.split('-');
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const monthName = monthNames[parseInt(month) - 1];
+    const now = new Date();
+    const monthName = now.toLocaleDateString('en-US', { month: 'long' });
+    const year = now.getFullYear();
     
     // Header
     docPdf.setFontSize(20);
     docPdf.setTextColor(22, 101, 52);
-    docPdf.text('Monthly Inventory Report', 14, 22);
+    docPdf.text('Current Month Inventory Report', 14, 22);
     
     let generatorName = 'Unknown User';
     if (auth.currentUser) {
@@ -957,7 +968,7 @@ export default function Materials() {
             className="flex items-center gap-2 text-sm font-semibold cursor-pointer text-white bg-purple-600 px-5 py-1.5 rounded-md hover:bg-purple-700 transition-all active:scale-95 shadow-sm"
           >
             <Calendar className="w-4 h-4" />
-            {generatingReport ? 'Loading...' : 'Monthly Report'}
+            {generatingReport ? 'Loading...' : 'Current Month Report'}
           </button>
           <button
             onClick={exportToPDF}
@@ -1156,7 +1167,7 @@ export default function Materials() {
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0">
               <h3 className="font-bold text-gray-800 text-base flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-purple-600" />
-                Monthly Inventory Report
+                Current Month Inventory Report
               </h3>
               <button
                 onClick={() => setShowReportModal(false)}
@@ -1167,28 +1178,26 @@ export default function Materials() {
             </div>
 
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {/* Month Selector */}
-              <div className="mb-6 flex items-center gap-4">
-                <label className="text-sm font-semibold text-gray-700">Select Month:</label>
-                <input
-                  type="month"
-                  value={reportMonth}
-                  onChange={(e) => setReportMonth(e.target.value)}
-                  className="px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                />
-                <button
-                  onClick={generateMonthlyReport}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-semibold hover:bg-purple-700 transition-all"
-                >
-                  Refresh Report
-                </button>
-                <button
-                  onClick={exportMonthlyReportPDF}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-semibold hover:bg-green-700 transition-all flex items-center gap-2"
-                >
-                  <FileDown className="w-4 h-4" />
-                  Export PDF
-                </button>
+              <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Current Month Report</p>
+                  <p className="text-xs text-gray-500">Showing inventory activity for {getCurrentMonthLabel()}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={generateMonthlyReport}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-semibold hover:bg-purple-700 transition-all"
+                  >
+                    Refresh Report
+                  </button>
+                  <button
+                    onClick={exportMonthlyReportPDF}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-semibold hover:bg-green-700 transition-all flex items-center gap-2"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    Export PDF
+                  </button>
+                </div>
               </div>
 
               {/* Summary Cards */}
@@ -1227,9 +1236,7 @@ export default function Materials() {
                     <Calendar className="w-5 h-5" />
                     <span className="text-xs font-bold uppercase tracking-wider">Period</span>
                   </div>
-                  <p className="text-sm font-semibold text-gray-700">
-                    {new Date(reportMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                  </p>
+                  <p className="text-sm font-semibold text-gray-700">{getCurrentMonthLabel()}</p>
                 </div>
               </div>
 
