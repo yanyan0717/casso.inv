@@ -23,6 +23,7 @@ interface Material {
   size?: string;
   variant?: string;
   low_stock_threshold?: number;
+  last_restocked?: string;
 }
 
 interface MaterialLog {
@@ -67,6 +68,7 @@ export default function Materials() {
   const [highlightItemId, setHighlightItemId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [lastRestockedMap, setLastRestockedMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -92,6 +94,14 @@ export default function Materials() {
   const [deductQty, setDeductQty] = useState('');
   const [deductReason, setDeductReason] = useState('');
   const [deducting, setDeducting] = useState(false);
+
+  // Add Quantity Modal State
+  const [showAddQtyModal, setShowAddQtyModal] = useState(false);
+  const [addSearch, setAddSearch] = useState('');
+  const [selectedAddItem, setSelectedAddItem] = useState<Material | null>(null);
+  const [addQty, setAddQty] = useState('');
+  const [addReason, setAddReason] = useState('');
+  const [addingQty, setAddingQty] = useState(false);
 
   // Monthly Report Modal State
   const [showReportModal, setShowReportModal] = useState(false);
@@ -156,6 +166,18 @@ export default function Materials() {
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Material));
       setMaterials(data);
+
+      // Prefer persisted `last_restocked` on materials to avoid scanning logs.
+      const restockMap: Record<string, string> = {};
+      data.forEach((m) => {
+        const raw = (m as any).last_restocked;
+        if (!raw) return;
+        const d = new Date(raw);
+        if (!isNaN(d.getTime())) {
+          restockMap[m.id] = d.toISOString();
+        }
+      });
+      setLastRestockedMap(restockMap);
     } catch (error) {
       console.error('Error fetching materials:', error);
       showToast('Failed to load materials', 'error');
@@ -301,10 +323,74 @@ export default function Materials() {
     setDeductSearch('');
   };
 
+  const openAddQtyModal = () => {
+    setShowAddQtyModal(true);
+    setAddSearch('');
+    setSelectedAddItem(null);
+    setAddQty('');
+    setAddReason('');
+  };
+
+  const closeAddQtyModal = () => {
+    setShowAddQtyModal(false);
+    setSelectedAddItem(null);
+    setAddQty('');
+    setAddReason('');
+    setAddSearch('');
+  };
+
+  const handleAddQuantity = async () => {
+    if (!selectedAddItem || !addQty || parseInt(addQty) <= 0) {
+      showToast('Please select an item and enter a valid quantity', 'error');
+      return;
+    }
+
+    const qty = parseInt(addQty);
+    setAddingQty(true);
+    const oldStock = selectedAddItem.stocks;
+    const newStock = oldStock + qty;
+
+    const user = auth.currentUser;
+
+    try {
+      await updateDoc(doc(db, 'materials', selectedAddItem.id), { stocks: newStock, last_restocked: new Date().toISOString() });
+      await addDoc(collection(db, 'material_logs'), {
+        material_ref: selectedAddItem.id,
+        material_name: selectedAddItem.name,
+        action_type: 'ADD',
+        quantity: qty,
+        reason: addReason || 'No reason provided',
+        user_id: user?.uid || null,
+        created_at: new Date().toISOString()
+      });
+
+      showToast(`Added ${qty} ${selectedAddItem.unit} to ${selectedAddItem.name}`, 'success');
+
+      setShowAddQtyModal(false);
+      setSelectedAddItem(null);
+      setAddQty('');
+      setAddReason('');
+      setAddSearch('');
+      await fetchMaterials();
+    } catch (error: any) {
+      console.error('Error adding quantity:', error);
+      showToast(`Error: ${error.message}`, 'error');
+    } finally {
+      setAddingQty(false);
+    }
+  };
+
   const filteredDeductItems = materials.filter((mat) =>
     deductSearch === '' || (
       mat.name.toLowerCase().includes(deductSearch.toLowerCase()) ||
       mat.category.toLowerCase().includes(deductSearch.toLowerCase())
+    )
+  );
+
+  const filteredAddItems = materials.filter((mat) =>
+    addSearch === '' || (
+      mat.name.toLowerCase().includes(addSearch.toLowerCase()) ||
+      mat.category.toLowerCase().includes(addSearch.toLowerCase())
     )
   );
 
@@ -739,6 +825,11 @@ export default function Materials() {
       low_stock_threshold: parseInt(formData.low_stock_threshold) || 5,
     };
 
+    // If new material starts with stock, set last_restocked
+    if (modalMode === 'add' && newStock > 0) {
+      materialData.last_restocked = new Date().toISOString();
+    }
+
     if (modalMode === 'add' && user) {
       materialData.created_by = user.uid;
       materialData.added_by = user.email;
@@ -960,6 +1051,13 @@ export default function Materials() {
                 Add Item
               </button>
               <button
+                onClick={openAddQtyModal}
+                className="flex items-center gap-2 text-sm font-semibold cursor-pointer text-white bg-emerald-600 px-5 py-1.5 rounded-md hover:bg-emerald-700 transition-all active:scale-95 shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Add Quantity
+              </button>
+              <button
                 onClick={openDeductModal}
                 className="flex items-center gap-2 text-sm font-semibold cursor-pointer text-white bg-red-600 px-5 py-1.5 rounded-md hover:bg-red-700 transition-all active:scale-95 shadow-sm"
               >
@@ -1058,6 +1156,9 @@ export default function Materials() {
                           <p className="text-slate-800 text-sm font-medium">{mat.name}</p>
                           {mat.variant && (
                             <p className="text-[10px] text-gray-400 mt-0.5">{mat.variant}</p>
+                          )}
+                          {lastRestockedMap[mat.id] && (
+                            <p className="text-[10px] text-gray-500 mt-0.5">Last restocked: {new Date(lastRestockedMap[mat.id]).toLocaleDateString()}</p>
                           )}
                         </div>
                       </td>
@@ -1620,6 +1721,134 @@ export default function Materials() {
                 className="flex-1 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors border-l border-gray-100"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Quantity Modal */}
+      {showAddQtyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-md shadow-xl overflow-hidden relative border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
+              <h3 className="font-bold text-gray-800 text-base flex items-center gap-2">
+                <Plus className="w-4 h-4 text-emerald-600" />
+                Add Quantity
+              </h3>
+              <button
+                onClick={closeAddQtyModal}
+                className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-full transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Search Material</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, category, or ID..."
+                    value={addSearch}
+                    onChange={(e) => {
+                      setAddSearch(e.target.value);
+                      setSelectedAddItem(null);
+                    }}
+                    className="w-full pl-9 pr-3 py-2 rounded-md border border-gray-200 bg-gray-50/30 text-black text-sm focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none font-medium"
+                  />
+                </div>
+              </div>
+
+              {!selectedAddItem && (
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md divide-y divide-gray-100">
+                  {filteredAddItems.length === 0 ? (
+                    <div className="p-4 text-center text-gray-400 text-sm">No materials found</div>
+                  ) : (
+                    filteredAddItems.map((mat) => (
+                      <button
+                        key={mat.id}
+                        onClick={() => setSelectedAddItem(mat)}
+                        className="w-full px-4 py-3 text-left hover:bg-emerald-50 transition-colors flex items-center justify-between"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{mat.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {mat.category}
+                            {mat.color && ` · ${mat.color}`}
+                            {mat.size && ` · ${mat.size}`}
+                          </p>
+                        </div>
+                        <span className="text-sm font-bold text-emerald-600">{mat.stocks} {mat.unit}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {selectedAddItem && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-md p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">{selectedAddItem.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {selectedAddItem.category}
+                        {selectedAddItem.color && ` · ${selectedAddItem.color}`}
+                        {selectedAddItem.size && ` · ${selectedAddItem.size}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedAddItem(null)}
+                      className="text-xs text-emerald-500 hover:text-emerald-700 font-medium"
+                    >
+                      Change
+                    </button>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-emerald-200 flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Current Stock</span>
+                    <span className="text-sm font-bold text-emerald-700">{selectedAddItem.stocks} {selectedAddItem.unit}</span>
+                  </div>
+                </div>
+              )}
+
+              {selectedAddItem && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Quantity to Add</label>
+                  <input
+                    type="number"
+                    placeholder="Enter quantity"
+                    value={addQty}
+                    onChange={(e) => setAddQty(e.target.value)}
+                    min="1"
+                    className="w-full px-3 py-2 rounded-md border border-gray-200 bg-gray-50/30 text-black text-sm focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none font-medium"
+                  />
+                </div>
+              )}
+
+              {selectedAddItem && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Reason (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Restocked, Returned, Inventory correction"
+                    value={addReason}
+                    onChange={(e) => setAddReason(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border border-gray-200 bg-gray-50/30 text-black text-sm focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none font-medium"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 pb-6">
+              <button
+                onClick={handleAddQuantity}
+                disabled={!selectedAddItem || !addQty || parseInt(addQty) <= 0 || addingQty}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-md text-sm font-bold shadow-sm transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+              >
+                <Plus className="w-4 h-4" />
+                {addingQty ? 'Adding...' : 'Confirm Addition'}
               </button>
             </div>
           </div>
