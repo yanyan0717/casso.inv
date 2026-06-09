@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Search, Settings2, Trash, BookOpen, X, Save, Camera, Plus, ArrowUp, ArrowDown, ChevronsUpDown, Minus, FileDown, Palette, Ruler, Tag, Calendar, TrendingUp, TrendingDown, BarChart3, AlertTriangle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { collection, query, orderBy, getDocs, doc, deleteDoc, addDoc, updateDoc, where, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, doc, deleteDoc, addDoc, updateDoc, where, getDoc, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { showToast } from '../components/Toast';
 import { TableSkeleton } from '../components/SkeletonLoader';
@@ -121,6 +121,8 @@ export default function Materials() {
     }
   });
   const [generatingReport, setGeneratingReport] = useState(false);
+
+  const isDevReport = new URLSearchParams(location.search).get('dev_report') === '1';
 
   const [formData, setFormData] = useState({
     id: '',
@@ -304,17 +306,38 @@ export default function Materials() {
     try {
       const [year, month] = reportMonth.split('-');
       const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59);
-      
+      const endDate = new Date(parseInt(year), parseInt(month) - 1 + 1, 0, 23, 59, 59, 999);
+
+      // Firestore values for `created_at` may be stored as strings or as Timestamps.
+      // Querying against mixed types can be unreliable, so we fetch recent logs
+      // and filter client-side to ensure we include every matching record.
       const logsRef = collection(db, 'material_logs');
-      const q = query(
-        logsRef,
-        where('created_at', '>=', startDate.toISOString()),
-        where('created_at', '<=', endDate.toISOString())
-      );
-      
-      const snapshot = await getDocs(q);
-      const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MaterialLog));
+      const snapshot = await getDocs(logsRef);
+      const logs: MaterialLog[] = [];
+      snapshot.docs.forEach((d) => {
+        const data: any = d.data();
+        const raw = data?.created_at;
+        if (!raw) return;
+
+        let createdDate: Date | null = null;
+        // Firestore Timestamp
+        if (typeof raw === 'object' && raw?.toDate && typeof raw.toDate === 'function') {
+          try {
+            createdDate = raw.toDate();
+          } catch (e) {
+            createdDate = null;
+          }
+        } else {
+          // Strings like ISO or numeric timestamps
+          createdDate = new Date(raw);
+        }
+
+        if (!createdDate || isNaN(createdDate.getTime())) return;
+
+        if (createdDate >= startDate && createdDate <= endDate) {
+          logs.push({ id: d.id, ...data, created_at: createdDate.toISOString() } as MaterialLog);
+        }
+      });
       
       const additions = logs.filter(log => log.action_type === 'ADD' || log.action_type === 'add');
       const deductions = logs.filter(log => log.action_type === 'deduction');
@@ -361,13 +384,96 @@ export default function Materials() {
           mostDeducted,
         }
       });
-      
       setShowReportModal(true);
+
+      // Archive this month's logs to a persistent collection so data isn't
+      // lost by the 30-day retention policy. To reduce storage usage we only
+      // keep a minimal snapshot (select fields) and skip archiving when there
+      // are no records.
+      try {
+        if (logs.length > 0) {
+          const minimal = logs.map((l) => ({
+            id: l.id,
+            material_ref: (l as any).material_ref || null,
+            material_name: l.material_name,
+            action_type: l.action_type,
+            quantity: l.quantity,
+            created_at: l.created_at,
+          }));
+
+          await addDoc(collection(db, 'material_logs_archive'), {
+            month: parseInt(month),
+            year: parseInt(year),
+            archived_at: new Date().toISOString(),
+            record_count: minimal.length,
+            logs: minimal,
+          });
+        }
+      } catch (archiveErr) {
+        console.error('Failed to archive monthly logs:', archiveErr);
+      }
     } catch (error) {
       console.error('Error generating report:', error);
       showToast('Failed to generate report', 'error');
     } finally {
       setGeneratingReport(false);
+    }
+  };
+
+  // Dev helper: create test logs for the selected report month (only when
+  // `?dev_report=1` is present in the URL). This helps verify report logic
+  // locally by adding a few sample ADD / deduction entries with mixed
+  // created_at types (ISO string and Firestore Timestamp).
+  const createTestLogs = async () => {
+    try {
+      const [year, month] = reportMonth.split('-');
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const sampleDates = [
+        new Date(startDate.getFullYear(), startDate.getMonth(), 5),
+        new Date(startDate.getFullYear(), startDate.getMonth(), 10),
+        new Date(startDate.getFullYear(), startDate.getMonth(), 20),
+      ];
+
+      const samples: any[] = [
+        {
+          material_ref: materials[0]?.id || 'test-item-1',
+          material_name: materials[0]?.name || 'Test Item A',
+          action_type: 'ADD',
+          quantity: 5,
+          reason: 'Dev test add (ISO)',
+          user_id: auth.currentUser?.uid || null,
+          created_at: sampleDates[0].toISOString(),
+        },
+        {
+          material_ref: materials[0]?.id || 'test-item-1',
+          material_name: materials[0]?.name || 'Test Item A',
+          action_type: 'add',
+          quantity: 3,
+          reason: 'Dev test add (Timestamp)',
+          user_id: auth.currentUser?.uid || null,
+          created_at: Timestamp.fromDate(sampleDates[1]),
+        },
+        {
+          material_ref: materials[0]?.id || 'test-item-2',
+          material_name: materials[1]?.name || 'Test Item B',
+          action_type: 'deduction',
+          quantity: 2,
+          reason: 'Dev test deduction (ISO)',
+          user_id: auth.currentUser?.uid || null,
+          created_at: sampleDates[2].toISOString(),
+        },
+      ];
+
+      for (const s of samples) {
+        await addDoc(collection(db, 'material_logs'), s);
+      }
+
+      showToast('Dev test logs created', 'success');
+      // Regenerate the report to reflect the newly created logs
+      await generateMonthlyReport();
+    } catch (err) {
+      console.error('Error creating test logs:', err);
+      showToast('Failed to create test logs', 'error');
     }
   };
   
@@ -860,6 +966,14 @@ export default function Materials() {
             <FileDown className="w-4 h-4" />
             PDF
           </button>
+          {isDevReport && (
+            <button
+              onClick={createTestLogs}
+              className="flex items-center gap-2 text-sm font-semibold cursor-pointer text-white bg-amber-600 px-4 py-1.5 rounded-md hover:bg-amber-700 transition-all active:scale-95 shadow-sm"
+            >
+              Create Test Logs
+            </button>
+          )}
         </div>
       </div>
 
