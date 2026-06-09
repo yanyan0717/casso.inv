@@ -350,8 +350,14 @@ export default function Materials() {
         }
       });
       
-      const additions = logs.filter(log => log.action_type === 'ADD' || log.action_type === 'add');
-      const deductions = logs.filter(log => log.action_type === 'deduction');
+      const additions = logs.filter((log) => {
+        const type = (log.action_type || '').toString().trim().toLowerCase();
+        return type === 'add';
+      });
+      const deductions = logs.filter((log) => {
+        const type = (log.action_type || '').toString().trim().toLowerCase();
+        return type === 'deduction' || type === 'approved_request' || type === 'delete';
+      });
       
       const totalAdditions = additions.reduce((sum, log) => sum + (log.quantity || 0), 0);
       const totalDeductions = deductions.reduce((sum, log) => sum + (log.quantity || 0), 0);
